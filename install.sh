@@ -1754,6 +1754,84 @@ install_x-ui() {
 └───────────────────────────────────────────────────────┘"
 }
 
+# Ex-ui's Packet tab proxies a packet-tunnel panel on this same host, so install
+# it alongside and hand both services one shared secret -- that pairing is what
+# removes the second login. Set EXUI_SKIP_PACKET=1 to skip.
+install_packet_tunnel() {
+    if [[ "${EXUI_SKIP_PACKET}" == "1" ]]; then
+        echo -e "${yellow}Skipping packet-tunnel install (EXUI_SKIP_PACKET=1).${plain}"
+        return 0
+    fi
+    if ! command -v systemctl >/dev/null 2>&1; then
+        echo -e "${yellow}No systemd detected - skipping packet-tunnel install.${plain}"
+        return 0
+    fi
+
+    echo -e "${green}Installing packet-tunnel for the Packet tab...${plain}"
+
+    local packet_secret=""
+    if command -v openssl >/dev/null 2>&1; then
+        packet_secret=$(openssl rand -hex 16)
+    else
+        packet_secret=$(head -c 16 /dev/urandom | od -An -tx1 | tr -d ' \n')
+    fi
+    if [[ -z "$packet_secret" ]]; then
+        echo -e "${red}Could not generate a Packet proxy secret - skipping.${plain}"
+        return 0
+    fi
+
+    local packet_installer="/tmp/packet-tunnel-install.$$.sh"
+    if ! curl -fLR --retry 3 --retry-delay 3 --connect-timeout 15 --max-time 300 \
+        -o "$packet_installer" \
+        "https://raw.githubusercontent.com/eris4444/packet-tunnel/main/install.sh"; then
+        echo -e "${red}Could not download the packet-tunnel installer - skipping.${plain}"
+        rm -f "$packet_installer"
+        return 0
+    fi
+
+    # packet-tunnel generates its own random panel password when none is given
+    # and prints the credentials at the end of its output.
+    if ! bash "$packet_installer"; then
+        echo -e "${red}packet-tunnel install failed - the Packet tab will show 502 until it runs.${plain}"
+        rm -f "$packet_installer"
+        return 0
+    fi
+    rm -f "$packet_installer"
+
+    local packet_service="/etc/systemd/system/paqet-panel.service"
+    if [[ -f "$packet_service" ]]; then
+        sed -i '/^Environment="PACKET_PROXY_SECRET=/d' "$packet_service"
+        sed -i "/^\[Service\]/a Environment=\"PACKET_PROXY_SECRET=${packet_secret}\"" "$packet_service"
+        systemctl daemon-reload
+        systemctl restart paqet-panel 2>/dev/null || true
+    else
+        echo -e "${yellow}paqet-panel.service not found - set PACKET_PROXY_SECRET on it manually.${plain}"
+    fi
+
+    local packet_env_file
+    case "${release}" in
+        ubuntu | debian | armbian)
+            packet_env_file="/etc/default/x-ui"
+            ;;
+        arch | manjaro | parch | alpine)
+            packet_env_file="/etc/conf.d/x-ui"
+            ;;
+        *)
+            packet_env_file="/etc/sysconfig/x-ui"
+            ;;
+    esac
+    install -d -m 755 "$(dirname "$packet_env_file")"
+    touch "$packet_env_file"
+    chmod 600 "$packet_env_file"
+    sed -i '/^PACKET_PROXY_SECRET=/d' "$packet_env_file"
+    echo "PACKET_PROXY_SECRET=${packet_secret}" >> "$packet_env_file"
+
+    systemctl restart x-ui 2>/dev/null || true
+
+    echo -e "${green}packet-tunnel installed - open the Packet tab in Ex-ui.${plain}"
+}
+
 echo -e "${green}Running...${plain}"
 install_base
 install_x-ui $1
+install_packet_tunnel

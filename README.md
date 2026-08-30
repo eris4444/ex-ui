@@ -94,19 +94,30 @@ For full documentation, please visit the upstream [project Wiki](https://github.
 
 ## Packet Tunnel Integration
 
-Ex-ui can embed a [packet-tunnel](https://github.com/eris4444/packet-tunnel) panel directly in a **Packet** sidebar tab, so it's reachable from inside Ex-ui without a second login. To use it:
+Ex-ui embeds a [packet-tunnel](https://github.com/eris4444/packet-tunnel) panel directly in a **Packet** sidebar tab, reachable from inside Ex-ui without a second login.
 
-1. Install packet-tunnel on the same server (it listens on port `7777` by default; set `PACKET_TUNNEL_PORT` for Ex-ui if you changed that in packet-tunnel's own settings).
+**The installer sets this up for you.** It installs packet-tunnel on the same server, generates a shared secret, writes it to both services, and restarts them — so after installing Ex-ui you just log in and open the **Packet** tab. packet-tunnel prints its own panel credentials at the end of its install output; note them down, since you need them if you ever open packet-tunnel directly on its own port.
+
+To install Ex-ui without packet-tunnel, set `EXUI_SKIP_PACKET=1` before running the installer.
+
+### Manual setup
+
+If packet-tunnel is already installed, or you skipped it:
+
+1. Make sure packet-tunnel runs on the same server on port `7777` (its default). Set `PACKET_TUNNEL_PORT` for Ex-ui if you changed it.
 2. Generate a shared secret:
 
    ```bash
    openssl rand -hex 16
    ```
 
-3. Set `PACKET_PROXY_SECRET=<secret>` in **both** environments — Ex-ui's service (e.g. `Environment=` in the systemd unit, or `/etc/default/x-ui`) and packet-tunnel's service — then restart both.
-4. Log into Ex-ui normally, then open the **Packet** tab.
+3. Set `PACKET_PROXY_SECRET=<secret>` in **both** environments — Ex-ui's (`/etc/default/x-ui`, or `/etc/conf.d/x-ui` / `/etc/sysconfig/x-ui` depending on the distro) and packet-tunnel's service unit — then restart both.
 
-The Packet tab is gated by Ex-ui's own login — nothing extra to configure there. Server-side, Ex-ui's reverse proxy attaches the shared secret to every proxied request so packet-tunnel can trust it; the secret never reaches the browser. packet-tunnel only honors that header for requests arriving from `127.0.0.1` — even though it binds `0.0.0.0` by default — so the bypass can't be triggered by a request coming from outside the server. If `PACKET_PROXY_SECRET` isn't set on either side, the tab still works but falls back to packet-tunnel's own login screen inside the frame.
+### How the single sign-on is secured
+
+The tab is gated by Ex-ui's own login, like every other `/panel` page. Ex-ui's reverse proxy attaches the shared secret server-side, so it **never reaches the browser**, and packet-tunnel honours that header only for requests arriving from `127.0.0.1`. That second condition matters: packet-tunnel binds `0.0.0.0` by default, so a secret check alone would let anyone able to reach its port skip the login. With `PACKET_PROXY_SECRET` unset on either side nothing is bypassed — the tab simply shows packet-tunnel's normal login inside the frame.
+
+Because the embedded pages need inline scripts and two CDNs that the panel's own Content-Security-Policy forbids, `/panel/packet/*` is served with its own policy and `X-Frame-Options: SAMEORIGIN` so the panel can frame it. Every other panel page keeps the strict nonce-based policy and `DENY`.
 
 ### Unattended install
 
