@@ -1,45 +1,45 @@
-.packet-page {
+.tunnel-page {
   --bg-page: #e6e8ec;
   --bg-card: #ffffff;
   height: 100vh;
   background: var(--bg-page);
 }
 
-.packet-page.is-dark {
+.tunnel-page.is-dark {
   --bg-page: #1a1b1f;
   --bg-card: #23252b;
 }
 
-.packet-page.is-dark.is-ultra {
+.tunnel-page.is-dark.is-ultra {
   --bg-page: #000;
   --bg-card: #101013;
 }
 
-.packet-page .ant-layout,
-.packet-page .ant-layout-content {
+.tunnel-page .ant-layout,
+.tunnel-page .ant-layout-content {
   background: transparent;
 }
 
-.packet-page .content-shell {
+.tunnel-page .content-shell {
   background: transparent;
   display: flex;
   flex-direction: column;
 }
 
-.packet-page .content-area {
+.tunnel-page .content-area {
   flex: 1;
   padding: 0;
   display: flex;
   min-height: 0;
 }
 
-.packet-page .packet-wrapper {
+.tunnel-page .tunnel-wrapper {
   flex: 1;
   display: flex;
   background: var(--bg-card);
 }
 
-.packet-page .packet-frame {
+.tunnel-page .tunnel-frame {
   flex: 1;
   width: 100%;
   border: none;

@@ -13,7 +13,7 @@ import (
 	"github.com/gin-gonic/gin"
 )
 
-// APIController handles the main API routes for the 3x-ui panel, including inbounds and server management.
+// APIController handles the main API routes for the Ex-ui panel, including inbounds and server management.
 type APIController struct {
 	BaseController
 	inboundController     *InboundController

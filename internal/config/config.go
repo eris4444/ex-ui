@@ -1,4 +1,4 @@
-// Package config provides configuration management utilities for the 3x-ui panel,
+// Package config provides configuration management utilities for the Ex-ui panel,
 // including version information, logging levels, database paths, and environment variable handling.
 package config
 
@@ -41,7 +41,7 @@ const (
 	Error   LogLevel = "error"
 )
 
-// GetBaseVersion returns the raw embedded release version of the 3x-ui panel
+// GetBaseVersion returns the raw embedded release version of the Ex-ui panel
 // (e.g. "3.4.0"). This is the panel's own version, not the Xray version. For the
 // version a panel advertises/displays (which adds a "dev+<sha>" label on dev
 // builds), use GetPanelVersion.
@@ -49,7 +49,7 @@ func GetBaseVersion() string {
 	return strings.TrimSpace(version)
 }
 
-// GetName returns the name of the 3x-ui application.
+// GetName returns the name of the Ex-ui application.
 func GetName() string {
 	return strings.TrimSpace(name)
 }

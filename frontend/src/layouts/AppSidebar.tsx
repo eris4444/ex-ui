@@ -66,7 +66,7 @@ type IconName =
   | 'apidocs'
   | 'outbound'
   | 'routing'
-  | 'packet';
+  | 'tunnel';
 
 const iconByName: Record<IconName, ComponentType> = {
   dashboard: DashboardOutlined,
@@ -81,7 +81,7 @@ const iconByName: Record<IconName, ComponentType> = {
   apidocs: ApiOutlined,
   outbound: ExportOutlined,
   routing: SwapOutlined,
-  packet: ThunderboltOutlined,
+  tunnel: ThunderboltOutlined,
 };
 
 function DonateButton({ ariaLabel }: { ariaLabel: string }) {
@@ -227,7 +227,7 @@ export default function AppSidebar() {
       { key: '/routing', icon: 'routing', title: t('menu.routing') },
       { key: '/settings', icon: 'setting', title: t('menu.settings') },
       { key: '/xray', icon: 'tool', title: t('menu.xray') },
-      { key: '/packet', icon: 'packet', title: t('menu.packet') },
+      { key: '/tunnel', icon: 'tunnel', title: t('menu.tunnel') },
       { key: '/api-docs', icon: 'apidocs', title: t('menu.apiDocs') },
       { key: LOGOUT_KEY, icon: 'logout', title: t('logout') },
     ],

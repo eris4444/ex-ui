@@ -192,7 +192,7 @@ pg_ensure_hba_password_auth() {
     local tmp
     tmp=$(mktemp) || return 1
     {
-        echo "# Added by 3x-ui: allow password logins for the panel database."
+        echo "# Added by Ex-ui: allow password logins for the panel database."
         echo "host    ${pg_db}    all    127.0.0.1/32    md5"
         echo "host    ${pg_db}    all    ::1/128         md5"
         cat "${hba_file}"
@@ -1789,10 +1789,17 @@ install_packet_tunnel() {
         return 0
     fi
 
-    # packet-tunnel generates its own random panel password when none is given
-    # and prints the credentials at the end of its output.
-    if ! bash "$packet_installer"; then
-        echo -e "${red}packet-tunnel install failed - the Packet tab will show 502 until it runs.${plain}"
+    # Credentials are supplied so the installer never prompts for a second
+    # account. The Tunnel tab is only ever reached through Ex-ui, which has
+    # already authenticated the user, so these stay dormant and unused.
+    local packet_fallback_pass=""
+    if command -v openssl >/dev/null 2>&1; then
+        packet_fallback_pass=$(openssl rand -hex 12)
+    else
+        packet_fallback_pass=$(head -c 12 /dev/urandom | od -An -tx1 | tr -d ' \n')
+    fi
+    if ! PANEL_USERNAME="exui" PANEL_PASSWORD="$packet_fallback_pass" bash "$packet_installer"; then
+        echo -e "${red}packet-tunnel install failed - the Tunnel tab will show 502 until it runs.${plain}"
         rm -f "$packet_installer"
         return 0
     fi
@@ -1801,6 +1808,10 @@ install_packet_tunnel() {
     local packet_service="/etc/systemd/system/paqet-panel.service"
     if [[ -f "$packet_service" ]]; then
         sed -i '/^Environment="PACKET_PROXY_SECRET=/d' "$packet_service"
+        sed -i '/^Environment="PANEL_BIND=/d' "$packet_service"
+        # Loopback only: the tunnel panel answers on Ex-ui's port through the
+        # proxy and nowhere else, so no second port faces the internet.
+        sed -i "/^\[Service\]/a Environment=\"PANEL_BIND=127.0.0.1\"" "$packet_service"
         sed -i "/^\[Service\]/a Environment=\"PACKET_PROXY_SECRET=${packet_secret}\"" "$packet_service"
         systemctl daemon-reload
         systemctl restart paqet-panel 2>/dev/null || true
@@ -1828,7 +1839,7 @@ install_packet_tunnel() {
 
     systemctl restart x-ui 2>/dev/null || true
 
-    echo -e "${green}packet-tunnel installed - open the Packet tab in Ex-ui.${plain}"
+    echo -e "${green}Tunnel panel installed - open the Tunnel tab in Ex-ui.${plain}"
 }
 
 echo -e "${green}Running...${plain}"
