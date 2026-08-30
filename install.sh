@@ -1457,10 +1457,12 @@ install_x-ui() {
             echo -e "${yellow}Installing the rolling dev build (tag: dev-latest). This is a per-commit pre-release, not a stable version.${plain}"
         else
             tag_version_numeric=${tag_version#v}
-            min_version="2.3.5"
+            # Ex-ui restarts versioning at v1.0.0, so upstream 3x-ui's 2.3.5
+            # floor would reject every release this repository publishes.
+            min_version="1.0.0"
 
             if [[ "$(printf '%s\n' "$min_version" "$tag_version_numeric" | sort -V | head -n1)" != "$min_version" ]]; then
-                echo -e "${red}Please use a newer version (at least v2.3.5). Exiting installation.${plain}"
+                echo -e "${red}Please use a newer version (at least v${min_version}). Exiting installation.${plain}"
                 exit 1
             fi
         fi
