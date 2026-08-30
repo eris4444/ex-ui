@@ -18,7 +18,7 @@
 
 # Ex-ui — Extended Xray Panel
 
-> **Ex-ui** is a fork of [3x-ui](https://github.com/MHSanaei/3x-ui) (GPL-3.0) that adds a built-in **Packet Tunnel** tab, letting you manage your [eris4444/packet-tunnel](https://github.com/eris4444/packet-tunnel) panel from inside Ex-ui without a separate login.
+> **Ex-ui** is a fork of [3x-ui](https://github.com/MHSanaei/3x-ui) (GPL-3.0) that adds a built-in **Tunnel** tab — Packet, Backhaul and SSH tunnels managed from inside the panel, on the panel's own port, behind the panel's own login.
 
 **Ex-ui** is an advanced, open-source web control panel for managing [Xray-core](https://github.com/XTLS/Xray-core) servers. It provides a clean, multi-language interface for deploying, configuring, and monitoring a wide range of proxy and VPN protocols — from a single VPS to multi-node deployments.
 
@@ -92,30 +92,37 @@ During installation a random username, password, and access path are generated. 
 
 For full documentation, please visit the upstream [project Wiki](https://github.com/MHSanaei/3x-ui/wiki).
 
-## Packet Tunnel Integration
+## Tunnel tab
 
-Ex-ui embeds a [packet-tunnel](https://github.com/eris4444/packet-tunnel) panel directly in a **Packet** sidebar tab, reachable from inside Ex-ui without a second login.
+The **Tunnel** entry in the sidebar opens a [packet-tunnel](https://github.com/eris4444/packet-tunnel) panel embedded in Ex-ui. It manages three kinds of tunnel, all from the same screen:
 
-**The installer sets this up for you.** It installs packet-tunnel on the same server, generates a shared secret, writes it to both services, and restarts them — so after installing Ex-ui you just log in and open the **Packet** tab. packet-tunnel prints its own panel credentials at the end of its install output; note them down, since you need them if you ever open packet-tunnel directly on its own port.
+| Kind | What it is |
+| --- | --- |
+| **Packet** | The paqet KCP tunnel — server on the foreign box, client on the Iran box. |
+| **Backhaul** | [Backhaul](https://github.com/Musixal/Backhaul) reverse tunnel over tcp, tcpmux, ws, wss, wsmux, wssmux or udp. The binary installs from the panel on first use. |
+| **SSH** | A persistent `ssh -L` / `-R` forward supervised by systemd, authenticated with a private key you paste in. |
 
-To install Ex-ui without packet-tunnel, set `EXUI_SKIP_PACKET=1` before running the installer.
+**There is no second login and no second port.** The installer sets everything up, and the tunnel panel binds `127.0.0.1` only — it answers on Ex-ui's own port, through Ex-ui's session, and is not reachable from outside the server at all.
+
+To install Ex-ui without it, set `EXUI_SKIP_PACKET=1` before running the installer.
 
 ### Manual setup
 
-If packet-tunnel is already installed, or you skipped it:
+If the tunnel panel is already installed, or you skipped it:
 
-1. Make sure packet-tunnel runs on the same server on port `7777` (its default). Set `PACKET_TUNNEL_PORT` for Ex-ui if you changed it.
+1. Make sure it runs on the same server on port `7777` (its default). Set `PACKET_TUNNEL_PORT` for Ex-ui if you changed it.
 2. Generate a shared secret:
 
    ```bash
    openssl rand -hex 16
    ```
 
-3. Set `PACKET_PROXY_SECRET=<secret>` in **both** environments — Ex-ui's (`/etc/default/x-ui`, or `/etc/conf.d/x-ui` / `/etc/sysconfig/x-ui` depending on the distro) and packet-tunnel's service unit — then restart both.
+3. Set `PACKET_PROXY_SECRET=<secret>` in **both** environments — Ex-ui's (`/etc/default/x-ui`, or `/etc/conf.d/x-ui` / `/etc/sysconfig/x-ui` depending on the distro) and the tunnel panel's service unit — then restart both.
+4. Add `Environment="PANEL_BIND=127.0.0.1"` to the tunnel panel's unit so it stops listening on every interface.
 
 ### How the single sign-on is secured
 
-The tab is gated by Ex-ui's own login, like every other `/panel` page. Ex-ui's reverse proxy attaches the shared secret server-side, so it **never reaches the browser**, and packet-tunnel honours that header only for requests arriving from `127.0.0.1`. That second condition matters: packet-tunnel binds `0.0.0.0` by default, so a secret check alone would let anyone able to reach its port skip the login. With `PACKET_PROXY_SECRET` unset on either side nothing is bypassed — the tab simply shows packet-tunnel's normal login inside the frame.
+The tab is gated by Ex-ui's own login, like every other `/panel` page. Ex-ui's reverse proxy attaches the shared secret server-side, so it **never reaches the browser**, and the tunnel panel honours that header only for requests arriving from `127.0.0.1`. That second condition is what makes the bypass safe if the panel is ever put back on a public interface with `PANEL_BIND`. With `PACKET_PROXY_SECRET` unset on either side nothing is bypassed — the tab simply shows the panel's own login inside the frame.
 
 Because the embedded pages need inline scripts and two CDNs that the panel's own Content-Security-Policy forbids, `/panel/packet/*` is served with its own policy and `X-Frame-Options: SAMEORIGIN` so the panel can frame it. Every other panel page keeps the strict nonce-based policy and `DENY`.
 
