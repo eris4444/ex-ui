@@ -94,12 +94,11 @@ For full documentation, please visit the upstream [project Wiki](https://github.
 
 Ex-ui can embed a [packet-tunnel](https://github.com/eris4444/packet-tunnel) panel directly in a **Packet** sidebar tab, so it's reachable from inside Ex-ui without a second login. To use it:
 
-1. Install packet-tunnel on the same server.
-2. Make sure packet-tunnel listens on `127.0.0.1:5000` (localhost only — it must not be reachable directly from outside the server).
-3. Set the environment variable `PACKET_PROXY_SECRET` to a random string before starting Ex-ui (e.g. in the systemd unit's `Environment=`), and set the same value in packet-tunnel's own environment.
-4. Log into Ex-ui normally, then open the **Packet** tab.
+1. Install packet-tunnel on the same server (it listens on port `7777` by default; set `PACKET_TUNNEL_PORT` for Ex-ui if you changed that in packet-tunnel's own settings).
+2. Set the environment variable `PACKET_PROXY_SECRET` to a random string before starting Ex-ui (e.g. in the systemd unit's `Environment=`), and set the same value in packet-tunnel's own environment before starting it.
+3. Log into Ex-ui normally, then open the **Packet** tab.
 
-The Packet tab is gated by Ex-ui's own login — nothing extra to configure there. Server-side, Ex-ui's reverse proxy attaches the shared secret to every proxied request so packet-tunnel can trust it; the secret never reaches the browser. If `PACKET_PROXY_SECRET` isn't set, the tab still works but falls back to packet-tunnel's own login screen inside the frame.
+The Packet tab is gated by Ex-ui's own login — nothing extra to configure there. Server-side, Ex-ui's reverse proxy attaches the shared secret to every proxied request so packet-tunnel can trust it; the secret never reaches the browser. packet-tunnel only honors that header for requests arriving from `127.0.0.1` — even though it binds `0.0.0.0` by default — so the bypass can't be triggered by a request coming from outside the server. If `PACKET_PROXY_SECRET` isn't set on either side, the tab still works but falls back to packet-tunnel's own login screen inside the frame.
 
 ### Unattended install
 

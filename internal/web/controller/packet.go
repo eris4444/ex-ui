@@ -14,15 +14,20 @@ import (
 // per-installation, read only server-side, and never sent to the browser.
 const packetProxySecretEnv = "PACKET_PROXY_SECRET"
 
-// packetUpstream is packet-tunnel's fixed local address; it is only ever
-// reached through this proxy, so it does not need to be configurable.
-const packetUpstream = "http://127.0.0.1:5000"
+// packetPortEnv overrides packet-tunnel's port for installs that changed it
+// from the default in packet-tunnel's own settings page (PANEL_PORT/panel_port
+// in eris4444/packet-tunnel's app.py).
+const packetPortEnv = "PACKET_TUNNEL_PORT"
+
+// defaultPacketPort matches packet-tunnel's own default (PANEL_PORT in app.py).
+const defaultPacketPort = "7777"
 
 // PacketController reverse-proxies /panel/packet/* to a packet-tunnel
-// instance running on the same host, so it appears as a tab inside the panel
-// without a second login. The route is gated by the panel's own session auth
-// (same as every other /panel page); packet-tunnel is told to trust the
-// request via a shared secret that only this server-side proxy knows.
+// instance running on 127.0.0.1 on the same host, so it appears as a tab
+// inside the panel without a second login. The route is gated by the panel's
+// own session auth (same as every other /panel page); packet-tunnel is told
+// to trust the request via a shared secret that only this server-side proxy
+// knows.
 type PacketController struct {
 	BaseController
 	target *url.URL
@@ -31,7 +36,11 @@ type PacketController struct {
 
 // NewPacketController creates and registers the packet-tunnel proxy controller.
 func NewPacketController(g *gin.RouterGroup) *PacketController {
-	target, _ := url.Parse(packetUpstream)
+	port := os.Getenv(packetPortEnv)
+	if port == "" {
+		port = defaultPacketPort
+	}
+	target, _ := url.Parse("http://127.0.0.1:" + port)
 	a := &PacketController{
 		target: target,
 		secret: os.Getenv(packetProxySecretEnv),
@@ -69,7 +78,7 @@ func (a *PacketController) proxy(c *gin.Context) {
 		},
 		ErrorHandler: func(w http.ResponseWriter, _ *http.Request, _ error) {
 			w.WriteHeader(http.StatusBadGateway)
-			_, _ = w.Write([]byte("packet-tunnel is not reachable on 127.0.0.1:5000"))
+			_, _ = w.Write([]byte("packet-tunnel is not reachable on " + a.target.Host))
 		},
 	}
 	rp.ServeHTTP(c.Writer, c.Request)
