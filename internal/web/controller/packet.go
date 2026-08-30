@@ -66,14 +66,13 @@ func (a *PacketController) proxy(c *gin.Context) {
 	secret := a.secret
 
 	rp := &httputil.ReverseProxy{
-		Director: func(req *http.Request) {
-			req.URL.Scheme = a.target.Scheme
-			req.URL.Host = a.target.Host
-			req.URL.Path = subPath
-			req.Host = a.target.Host
-			req.Header.Del("Cookie")
+		Rewrite: func(r *httputil.ProxyRequest) {
+			r.SetURL(a.target)
+			r.Out.URL.Path = subPath
+			r.Out.Host = a.target.Host
+			r.Out.Header.Del("Cookie")
 			if secret != "" {
-				req.Header.Set("X-Packet-Secret", secret)
+				r.Out.Header.Set("X-Packet-Secret", secret)
 			}
 		},
 		ErrorHandler: func(w http.ResponseWriter, _ *http.Request, _ error) {
