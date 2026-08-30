@@ -1,6 +1,7 @@
 package controller
 
 import (
+	"io"
 	"net/http"
 	"net/http/httptest"
 	"net/url"
@@ -9,22 +10,27 @@ import (
 	"github.com/gin-gonic/gin"
 )
 
-// newPacketProxy builds a controller pointed at a stub standing in for
-// packet-tunnel, bypassing NewPacketController so the test does not depend on
-// process environment or on the real upstream port being free.
-func newPacketProxy(t *testing.T, upstream string, secret string) *gin.Engine {
+// newPacketPanel serves the proxy route from a real HTTP server rather than a
+// ResponseRecorder: gin's ResponseWriter forwards CloseNotify to the writer
+// underneath it, and httputil.ReverseProxy calls it, so a recorder panics where
+// production never would. Building the controller directly also keeps the test
+// off the process environment and the real packet-tunnel port.
+func newPacketPanel(t *testing.T, upstream, secret string) *httptest.Server {
 	t.Helper()
 	gin.SetMode(gin.TestMode)
 
 	target, err := url.Parse(upstream)
 	if err != nil {
-		t.Fatalf("parse upstream: %v", err)
+		t.Fatalf("parse upstream %q: %v", upstream, err)
 	}
 	a := &PacketController{target: target, secret: secret}
 
 	engine := gin.New()
 	engine.Any("/panel/packet/*path", a.proxy)
-	return engine
+
+	panel := httptest.NewServer(engine)
+	t.Cleanup(panel.Close)
+	return panel
 }
 
 func TestPacketProxyForwardsToUpstream(t *testing.T) {
@@ -45,27 +51,34 @@ func TestPacketProxyForwardsToUpstream(t *testing.T) {
 			cookie: r.Header.Get("Cookie"),
 			host:   r.Host,
 		}
-		w.WriteHeader(http.StatusOK)
 		_, _ = w.Write([]byte("packet-tunnel ok"))
 	}))
 	t.Cleanup(upstream.Close)
 
-	engine := newPacketProxy(t, upstream.URL, "s3cr3t")
+	panel := newPacketPanel(t, upstream.URL, "s3cr3t")
 
-	req := httptest.NewRequest(http.MethodGet, "/panel/packet/services?filter=active", nil)
+	req, err := http.NewRequest(http.MethodGet, panel.URL+"/panel/packet/services?filter=active", nil)
+	if err != nil {
+		t.Fatalf("build request: %v", err)
+	}
 	req.Header.Set("Cookie", "3x-ui=session-value")
-	w := httptest.NewRecorder()
-	engine.ServeHTTP(w, req)
 
-	if w.Code != http.StatusOK {
-		t.Fatalf("status = %d, want 200 (body=%s)", w.Code, w.Body.String())
+	resp, err := panel.Client().Do(req)
+	if err != nil {
+		t.Fatalf("request panel: %v", err)
 	}
-	if body := w.Body.String(); body != "packet-tunnel ok" {
-		t.Errorf("body = %q, want upstream response passed through", body)
+	defer resp.Body.Close()
+	body, _ := io.ReadAll(resp.Body)
+
+	if resp.StatusCode != http.StatusOK {
+		t.Fatalf("status = %d, want 200 (body=%s)", resp.StatusCode, body)
+	}
+	if string(body) != "packet-tunnel ok" {
+		t.Errorf("body = %q, want the upstream response passed through", body)
 	}
 
-	// The /panel/packet prefix must be stripped: packet-tunnel serves /services,
-	// not /panel/packet/services.
+	// The /panel/packet prefix belongs to the panel: packet-tunnel serves
+	// /services, and would 404 if the prefix were forwarded verbatim.
 	if got.path != "/services" {
 		t.Errorf("upstream path = %q, want %q", got.path, "/services")
 	}
@@ -80,8 +93,8 @@ func TestPacketProxyForwardsToUpstream(t *testing.T) {
 	if got.cookie != "" {
 		t.Errorf("Cookie = %q, want it stripped", got.cookie)
 	}
-	if got.host != upstream.Listener.Addr().String() {
-		t.Errorf("Host = %q, want upstream host %q", got.host, upstream.Listener.Addr().String())
+	if want := upstream.Listener.Addr().String(); got.host != want {
+		t.Errorf("Host = %q, want upstream host %q", got.host, want)
 	}
 }
 
@@ -89,35 +102,45 @@ func TestPacketProxyOmitsSecretHeaderWhenUnset(t *testing.T) {
 	var present bool
 	upstream := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		_, present = r.Header["X-Packet-Secret"]
-		w.WriteHeader(http.StatusOK)
+		_, _ = w.Write([]byte("ok"))
 	}))
 	t.Cleanup(upstream.Close)
 
-	engine := newPacketProxy(t, upstream.URL, "")
+	panel := newPacketPanel(t, upstream.URL, "")
 
-	req := httptest.NewRequest(http.MethodGet, "/panel/packet/", nil)
-	w := httptest.NewRecorder()
-	engine.ServeHTTP(w, req)
-
-	if w.Code != http.StatusOK {
-		t.Fatalf("status = %d, want 200", w.Code)
+	resp, err := panel.Client().Get(panel.URL + "/panel/packet/")
+	if err != nil {
+		t.Fatalf("request panel: %v", err)
 	}
-	// An empty secret must send no header at all, so packet-tunnel falls back to
-	// its own login rather than comparing against an empty configured secret.
+	defer resp.Body.Close()
+	_, _ = io.Copy(io.Discard, resp.Body)
+
+	if resp.StatusCode != http.StatusOK {
+		t.Fatalf("status = %d, want 200", resp.StatusCode)
+	}
+	// With no secret configured the header must be absent entirely, so
+	// packet-tunnel falls back to its own login instead of comparing an empty
+	// header against an empty configured secret and letting everything through.
 	if present {
 		t.Error("X-Packet-Secret was sent even though no secret is configured")
 	}
 }
 
 func TestPacketProxyReportsUnreachableUpstream(t *testing.T) {
-	// Port 1 on loopback: reserved and never listening, so the dial fails fast.
-	engine := newPacketProxy(t, "http://127.0.0.1:1", "s3cr3t")
+	// Port 9 (discard) has nothing listening on loopback in CI, so the dial
+	// fails fast instead of hanging.
+	panel := newPacketPanel(t, "http://127.0.0.1:9", "s3cr3t")
 
-	req := httptest.NewRequest(http.MethodGet, "/panel/packet/", nil)
-	w := httptest.NewRecorder()
-	engine.ServeHTTP(w, req)
+	resp, err := panel.Client().Get(panel.URL + "/panel/packet/")
+	if err != nil {
+		t.Fatalf("request panel: %v", err)
+	}
+	defer resp.Body.Close()
+	_, _ = io.Copy(io.Discard, resp.Body)
 
-	if w.Code != http.StatusBadGateway {
-		t.Fatalf("status = %d, want 502 when packet-tunnel is down", w.Code)
+	// A packet-tunnel that is not running must read as a gateway failure rather
+	// than a panic or a blank 200.
+	if resp.StatusCode != http.StatusBadGateway {
+		t.Fatalf("status = %d, want 502 when packet-tunnel is down", resp.StatusCode)
 	}
 }
