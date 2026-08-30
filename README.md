@@ -3,22 +3,24 @@
 <p align="center">
   <picture>
     <source media="(prefers-color-scheme: dark)" srcset="./media/3x-ui-dark.png">
-    <img alt="3x-ui" src="./media/3x-ui-light.png">
+    <img alt="Ex-ui" src="./media/3x-ui-light.png">
   </picture>
 </p>
 
 <p align="center">
-  <a href="https://github.com/MHSanaei/3x-ui/releases"><img src="https://img.shields.io/github/v/release/mhsanaei/3x-ui" alt="Release"></a>
-  <a href="https://github.com/MHSanaei/3x-ui/actions"><img src="https://img.shields.io/github/actions/workflow/status/mhsanaei/3x-ui/release.yml.svg" alt="Build"></a>
+  <a href="https://github.com/eris4444/ex-ui/releases"><img src="https://img.shields.io/github/v/release/eris4444/ex-ui" alt="Release"></a>
+  <a href="https://github.com/eris4444/ex-ui/actions"><img src="https://img.shields.io/github/actions/workflow/status/eris4444/ex-ui/release.yml.svg" alt="Build"></a>
   <a href="#"><img src="https://img.shields.io/github/go-mod/go-version/mhsanaei/3x-ui.svg" alt="GO Version"></a>
-  <a href="https://github.com/MHSanaei/3x-ui/releases/latest"><img src="https://img.shields.io/github/downloads/mhsanaei/3x-ui/total.svg" alt="Downloads"></a>
+  <a href="https://github.com/eris4444/ex-ui/releases/latest"><img src="https://img.shields.io/github/downloads/eris4444/ex-ui/total.svg" alt="Downloads"></a>
   <a href="https://www.gnu.org/licenses/gpl-3.0.en.html"><img src="https://img.shields.io/badge/license-GPL%20V3-blue.svg?longCache=true" alt="License"></a>
   <a href="https://pkg.go.dev/github.com/mhsanaei/3x-ui/v3"><img src="https://pkg.go.dev/badge/github.com/mhsanaei/3x-ui/v3.svg" alt="Go Reference"></a>
 </p>
 
-**3X-UI** is an advanced, open-source web control panel for managing [Xray-core](https://github.com/XTLS/Xray-core) servers. It provides a clean, multi-language interface for deploying, configuring, and monitoring a wide range of proxy and VPN protocols — from a single VPS to multi-node deployments.
+> **Ex-ui** is a fork of [3x-ui](https://github.com/MHSanaei/3x-ui) that adds a built-in **Packet Tunnel** tab, letting you manage your [eris4444/packet-tunnel](https://github.com/eris4444/packet-tunnel) panel from inside Ex-ui without a separate login.
 
-Built as an enhanced fork of the original X-UI project, 3X-UI adds broader protocol support, improved stability, per-client traffic accounting, and many quality-of-life features.
+**Ex-ui** is an advanced, open-source web control panel for managing [Xray-core](https://github.com/XTLS/Xray-core) servers. It provides a clean, multi-language interface for deploying, configuring, and monitoring a wide range of proxy and VPN protocols — from a single VPS to multi-node deployments.
+
+Built as an enhanced fork of the original X-UI project, Ex-ui adds broader protocol support, improved stability, per-client traffic accounting, and many quality-of-life features.
 
 > [!IMPORTANT]
 > This project is intended for personal use only. Please do not use it for illegal purposes or in a production environment.
@@ -69,24 +71,35 @@ Built as an enhanced fork of the original X-UI project, 3X-UI adds broader proto
 ## Quick Start
 
 ```bash
-bash <(curl -Ls https://raw.githubusercontent.com/mhsanaei/3x-ui/master/install.sh)
+bash <(curl -fsSL https://raw.githubusercontent.com/eris4444/ex-ui/main/install.sh)
 ```
 
-To install a specific version, append its tag (e.g. `v3.4.0`):
+To install a specific version, append its tag (e.g. `v1.0.0`):
 
 ```bash
-bash <(curl -Ls https://raw.githubusercontent.com/mhsanaei/3x-ui/master/install.sh) v3.4.0
+bash <(curl -fsSL https://raw.githubusercontent.com/eris4444/ex-ui/main/install.sh) v1.0.0
 ```
 
 To install the rolling **dev** build (latest per-commit pre-release from `main`, not a stable release), pass `dev-latest`:
 
 ```bash
-bash <(curl -Ls https://raw.githubusercontent.com/mhsanaei/3x-ui/master/install.sh) dev-latest
+bash <(curl -fsSL https://raw.githubusercontent.com/eris4444/ex-ui/main/install.sh) dev-latest
 ```
 
 During installation a random username, password, and access path are generated. After installation, run `x-ui` to open the management menu, where you can start/stop the service, view or reset your login credentials, manage SSL certificates, and more.
 
-For full documentation, please visit the [project Wiki](https://github.com/MHSanaei/3x-ui/wiki).
+For full documentation, please visit the upstream [project Wiki](https://github.com/MHSanaei/3x-ui/wiki).
+
+## Packet Tunnel Integration
+
+Ex-ui can embed a [packet-tunnel](https://github.com/eris4444/packet-tunnel) panel directly in a **Packet** sidebar tab, so it's reachable from inside Ex-ui without a second login. To use it:
+
+1. Install packet-tunnel on the same server.
+2. Make sure packet-tunnel listens on `127.0.0.1:5000` (localhost only — it must not be reachable directly from outside the server).
+3. Set the environment variable `PACKET_PROXY_SECRET` to a random string before starting Ex-ui (e.g. in the systemd unit's `Environment=`), and set the same value in packet-tunnel's own environment.
+4. Log into Ex-ui normally, then open the **Packet** tab.
+
+The Packet tab is gated by Ex-ui's own login — nothing extra to configure there. Server-side, Ex-ui's reverse proxy attaches the shared secret to every proxied request so packet-tunnel can trust it; the secret never reaches the browser. If `PACKET_PROXY_SECRET` isn't set, the tab still works but falls back to packet-tunnel's own login screen inside the frame.
 
 ### Unattended install
 
@@ -129,6 +142,8 @@ systemctl restart x-ui
 The source SQLite file is left untouched; remove it manually once you have verified the new backend.
 
 ### Docker
+
+> Container images still track the upstream `mhsanaei/3x-ui` image below — this fork doesn't publish its own yet, so a Docker install won't have the Packet tab. Use the [install script](#quick-start) for that.
 
 The default `docker compose up -d` keeps using SQLite. To run with the bundled PostgreSQL service, uncomment the two `XUI_DB_*` env lines in `docker-compose.yml` and start with the profile:
 
@@ -182,6 +197,11 @@ Contributions are welcome. Please read the [Contributing Guide](/CONTRIBUTING.md
 - [Iran v2ray rules](https://github.com/chocolate4u/Iran-v2ray-rules) (License: **GPL-3.0**): _Enhanced v2ray/xray and v2ray/xray-clients routing rules with built-in Iranian domains and a focus on security and adblocking._
 - [Russia v2ray rules](https://github.com/runetfreedom/russia-v2ray-rules-dat) (License: **GPL-3.0**): _This repository contains automatically updated V2Ray routing rules based on data on blocked domains and addresses in Russia._
 
+## Credits
+
+- **Upstream:** [MHSanaei/3x-ui](https://github.com/MHSanaei/3x-ui) — GPL-3.0
+- **Packet Tunnel:** [eris4444/packet-tunnel](https://github.com/eris4444/packet-tunnel)
+
 ## Community Tools
 
 Tools and integrations built by the community around 3x-ui.
@@ -203,4 +223,4 @@ Tools and integrations built by the community around 3x-ui.
 
 ## Stargazers over Time
 
-[![Stargazers over time](https://starchart.cc/MHSanaei/3x-ui.svg?variant=adaptive)](https://starchart.cc/MHSanaei/3x-ui)
+[![Stargazers over time](https://starchart.cc/eris4444/ex-ui.svg?variant=adaptive)](https://starchart.cc/eris4444/ex-ui)
