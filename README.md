@@ -16,7 +16,9 @@
   <a href="https://pkg.go.dev/github.com/mhsanaei/3x-ui/v3"><img src="https://pkg.go.dev/badge/github.com/mhsanaei/3x-ui/v3.svg" alt="Go Reference"></a>
 </p>
 
-> **Ex-ui** is a fork of [3x-ui](https://github.com/MHSanaei/3x-ui) that adds a built-in **Packet Tunnel** tab, letting you manage your [eris4444/packet-tunnel](https://github.com/eris4444/packet-tunnel) panel from inside Ex-ui without a separate login.
+# Ex-ui — Extended Xray Panel
+
+> **Ex-ui** is a fork of [3x-ui](https://github.com/MHSanaei/3x-ui) (GPL-3.0) that adds a built-in **Packet Tunnel** tab, letting you manage your [eris4444/packet-tunnel](https://github.com/eris4444/packet-tunnel) panel from inside Ex-ui without a separate login.
 
 **Ex-ui** is an advanced, open-source web control panel for managing [Xray-core](https://github.com/XTLS/Xray-core) servers. It provides a clean, multi-language interface for deploying, configuring, and monitoring a wide range of proxy and VPN protocols — from a single VPS to multi-node deployments.
 
@@ -95,8 +97,14 @@ For full documentation, please visit the upstream [project Wiki](https://github.
 Ex-ui can embed a [packet-tunnel](https://github.com/eris4444/packet-tunnel) panel directly in a **Packet** sidebar tab, so it's reachable from inside Ex-ui without a second login. To use it:
 
 1. Install packet-tunnel on the same server (it listens on port `7777` by default; set `PACKET_TUNNEL_PORT` for Ex-ui if you changed that in packet-tunnel's own settings).
-2. Set the environment variable `PACKET_PROXY_SECRET` to a random string before starting Ex-ui (e.g. in the systemd unit's `Environment=`), and set the same value in packet-tunnel's own environment before starting it.
-3. Log into Ex-ui normally, then open the **Packet** tab.
+2. Generate a shared secret:
+
+   ```bash
+   openssl rand -hex 16
+   ```
+
+3. Set `PACKET_PROXY_SECRET=<secret>` in **both** environments — Ex-ui's service (e.g. `Environment=` in the systemd unit, or `/etc/default/x-ui`) and packet-tunnel's service — then restart both.
+4. Log into Ex-ui normally, then open the **Packet** tab.
 
 The Packet tab is gated by Ex-ui's own login — nothing extra to configure there. Server-side, Ex-ui's reverse proxy attaches the shared secret to every proxied request so packet-tunnel can trust it; the secret never reaches the browser. packet-tunnel only honors that header for requests arriving from `127.0.0.1` — even though it binds `0.0.0.0` by default — so the bypass can't be triggered by a request coming from outside the server. If `PACKET_PROXY_SECRET` isn't set on either side, the tab still works but falls back to packet-tunnel's own login screen inside the frame.
 
@@ -207,9 +215,9 @@ Tools and integrations built by the community around 3x-ui.
 
 - [terraform-provider-3x-ui](https://github.com/batonogov/terraform-provider-threexui) (License: **MIT**): _Manage inbounds, clients, panel settings, and Xray configuration as code with Terraform / OpenTofu._
 
-## Support project
+## Support the upstream project
 
-**If this project is helpful to you, you may wish to give it a**:star2:
+Ex-ui exists because of the work behind 3x-ui. The links below go to its author, **MHSanaei** — not to this fork:
 
 <a href="https://www.buymeacoffee.com/MHSanaei" target="_blank">
 <img src="./media/default-yellow.png" alt="Buy Me A Coffee" style="height: 70px !important;width: 277px !important;" >
@@ -223,3 +231,8 @@ Tools and integrations built by the community around 3x-ui.
 ## Stargazers over Time
 
 [![Stargazers over time](https://starchart.cc/eris4444/ex-ui.svg?variant=adaptive)](https://starchart.cc/eris4444/ex-ui)
+
+## License
+
+GPL-3.0 — see [LICENSE](LICENSE). Ex-ui is a derivative work of
+[MHSanaei/3x-ui](https://github.com/MHSanaei/3x-ui) and is distributed under the same license.
