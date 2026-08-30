@@ -253,6 +253,7 @@ func (s *Server) initRouter() (*gin.Engine, error) {
 	s.index = controller.NewIndexController(g)
 	s.panel = controller.NewXUIController(g)
 	s.api = controller.NewAPIController(g)
+	controller.NewPacketController(g)
 
 	// Initialize WebSocket hub
 	s.wsHub = websocket.NewHub()
