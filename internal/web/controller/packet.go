@@ -5,9 +5,26 @@ import (
 	"net/http/httputil"
 	"net/url"
 	"os"
+	"strings"
 
 	"github.com/gin-gonic/gin"
 )
+
+// packetFrameCSP governs the proxied packet-tunnel subtree only. Its pages use
+// inline <script>, inline event handlers and two CDNs, none of which survive the
+// panel's nonce-based policy; frame-ancestors 'self' is what lets the Packet tab
+// embed it. Served directly on its own port packet-tunnel sends no CSP at all,
+// so this is stricter than reaching it that way, not looser.
+const packetFrameCSP = "default-src 'self'; " +
+	"script-src 'self' 'unsafe-inline'; " +
+	"style-src 'self' 'unsafe-inline' https://cdnjs.cloudflare.com https://fonts.googleapis.com; " +
+	"font-src 'self' data: https://cdnjs.cloudflare.com https://fonts.gstatic.com; " +
+	"img-src 'self' data: blob:; " +
+	"connect-src 'self'; " +
+	"object-src 'none'; " +
+	"frame-ancestors 'self'; " +
+	"base-uri 'self'; " +
+	"form-action 'self'"
 
 // packetProxySecretEnv names the environment variable holding the shared
 // secret that authorizes proxied requests to packet-tunnel. It is generated
@@ -64,6 +81,11 @@ func (a *PacketController) proxy(c *gin.Context) {
 		subPath = "/"
 	}
 	secret := a.secret
+	// packet-tunnel builds links with url_for(), which emits root-relative
+	// paths. Inside the tab those would point at the panel root and 404, so the
+	// mount point travels with the request and packet-tunnel prefixes its URLs
+	// with it (see the SCRIPT_NAME middleware in eris4444/packet-tunnel).
+	scriptName := strings.TrimSuffix(c.GetString("base_path"), "/") + "/panel/packet"
 
 	rp := &httputil.ReverseProxy{
 		Rewrite: func(r *httputil.ProxyRequest) {
@@ -71,14 +93,32 @@ func (a *PacketController) proxy(c *gin.Context) {
 			r.Out.URL.Path = subPath
 			r.Out.Host = a.target.Host
 			r.Out.Header.Del("Cookie")
+			r.Out.Header.Set("X-Script-Name", scriptName)
 			if secret != "" {
 				r.Out.Header.Set("X-Packet-Secret", secret)
 			}
+		},
+		ModifyResponse: func(resp *http.Response) error {
+			// Headers set below are already on the response writer; anything
+			// upstream sends would be appended next to them and the browser then
+			// enforces whichever is stricter.
+			resp.Header.Del("X-Frame-Options")
+			resp.Header.Del("Content-Security-Policy")
+			return nil
 		},
 		ErrorHandler: func(w http.ResponseWriter, _ *http.Request, _ error) {
 			w.WriteHeader(http.StatusBadGateway)
 			_, _ = w.Write([]byte("packet-tunnel is not reachable on " + a.target.Host))
 		},
 	}
+
+	// The panel denies framing outright and admits scripts only with its nonce.
+	// Both are correct for the panel and both make an embedded packet-tunnel
+	// unusable, so this subtree carries its own policy. SAMEORIGIN still refuses
+	// framing by any other site, and the panel's own pages keep the strict one.
+	h := c.Writer.Header()
+	h.Set("X-Frame-Options", "SAMEORIGIN")
+	h.Set("Content-Security-Policy", packetFrameCSP)
+
 	rp.ServeHTTP(c.Writer, c.Request)
 }

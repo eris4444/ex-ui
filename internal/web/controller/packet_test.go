@@ -5,9 +5,12 @@ import (
 	"net/http"
 	"net/http/httptest"
 	"net/url"
+	"strings"
 	"testing"
 
 	"github.com/gin-gonic/gin"
+
+	"github.com/mhsanaei/3x-ui/v3/internal/web/middleware"
 )
 
 // newPacketPanel serves the proxy route from a real HTTP server rather than a
@@ -26,6 +29,10 @@ func newPacketPanel(t *testing.T, upstream, secret string) *httptest.Server {
 	a := &PacketController{target: target, secret: secret}
 
 	engine := gin.New()
+	// The real engine installs this globally, and its X-Frame-Options: DENY plus
+	// nonce-only script-src are exactly what the proxy has to override for the
+	// tab to render, so the test is only meaningful with it in place.
+	engine.Use(middleware.SecurityHeadersMiddleware(false))
 	engine.Any("/panel/packet/*path", a.proxy)
 
 	panel := httptest.NewServer(engine)
@@ -142,5 +149,69 @@ func TestPacketProxyReportsUnreachableUpstream(t *testing.T) {
 	// than a panic or a blank 200.
 	if resp.StatusCode != http.StatusBadGateway {
 		t.Fatalf("status = %d, want 502 when packet-tunnel is down", resp.StatusCode)
+	}
+}
+
+func TestPacketProxyAllowsSameOriginFraming(t *testing.T) {
+	upstream := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		// Some Flask deployments send their own framing headers; they must not
+		// survive alongside the panel's, since browsers honour the stricter one.
+		w.Header().Set("X-Frame-Options", "DENY")
+		w.Header().Set("Content-Security-Policy", "frame-ancestors 'none'")
+		_, _ = w.Write([]byte("<html>packet</html>"))
+	}))
+	t.Cleanup(upstream.Close)
+
+	panel := newPacketPanel(t, upstream.URL, "s3cr3t")
+
+	resp, err := panel.Client().Get(panel.URL + "/panel/packet/")
+	if err != nil {
+		t.Fatalf("request panel: %v", err)
+	}
+	defer resp.Body.Close()
+	_, _ = io.Copy(io.Discard, resp.Body)
+
+	// DENY blocks the panel's own iframe too, which is what broke the tab.
+	if got := resp.Header.Values("X-Frame-Options"); len(got) != 1 || got[0] != "SAMEORIGIN" {
+		t.Errorf("X-Frame-Options = %v, want exactly [SAMEORIGIN]", got)
+	}
+
+	csp := resp.Header.Values("Content-Security-Policy")
+	if len(csp) != 1 {
+		t.Fatalf("Content-Security-Policy = %v, want exactly one policy", csp)
+	}
+	if strings.Contains(csp[0], "frame-ancestors 'none'") {
+		t.Errorf("CSP still forbids framing: %q", csp[0])
+	}
+	if !strings.Contains(csp[0], "frame-ancestors 'self'") {
+		t.Errorf("CSP = %q, want frame-ancestors 'self'", csp[0])
+	}
+	// packet-tunnel's pages are built from inline scripts and handlers.
+	if !strings.Contains(csp[0], "'unsafe-inline'") {
+		t.Errorf("CSP = %q, want inline scripts allowed for the embedded panel", csp[0])
+	}
+}
+
+func TestPacketProxyForwardsMountPoint(t *testing.T) {
+	var scriptName string
+	upstream := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		scriptName = r.Header.Get("X-Script-Name")
+		_, _ = w.Write([]byte("ok"))
+	}))
+	t.Cleanup(upstream.Close)
+
+	panel := newPacketPanel(t, upstream.URL, "s3cr3t")
+
+	resp, err := panel.Client().Get(panel.URL + "/panel/packet/services")
+	if err != nil {
+		t.Fatalf("request panel: %v", err)
+	}
+	defer resp.Body.Close()
+	_, _ = io.Copy(io.Discard, resp.Body)
+
+	// Without this packet-tunnel's url_for() emits /services, which resolves
+	// against the panel root inside the tab and 404s.
+	if scriptName != "/panel/packet" {
+		t.Errorf("X-Script-Name = %q, want %q", scriptName, "/panel/packet")
 	}
 }
